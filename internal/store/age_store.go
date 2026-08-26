@@ -63,6 +63,7 @@ func (s *Store) GetAgeResult(id int64) (*model.AgeResult, error) {
 		return nil, fmt.Errorf("scan age result: %w", err)
 	}
 	a.AnomalyFlag = flag != 0
+	a.CreatedAt = createdMs
 	return a, nil
 }
 
@@ -86,6 +87,7 @@ func (s *Store) ListAgeResults(batchID int64) ([]*model.AgeResult, error) {
 			return nil, fmt.Errorf("scan age result row: %w", err)
 		}
 		a.AnomalyFlag = flag != 0
+		a.CreatedAt = createdMs
 		out = append(out, a)
 	}
 	return out, rows.Err()

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 )
@@ -65,6 +66,11 @@ type MeasurementInput struct {
 }
 
 // Validate checks the input fields.
+//
+// Ratio, RatioUnc and CertifiedRatio must be finite numbers: NaN and
+// +/-Inf are not representable experimental values and would propagate into
+// uninterpretable drift, correction and age results if admitted, so they are
+// rejected here before anything is written to the database.
 func (m MeasurementInput) Validate() error {
 	if m.BatchID <= 0 {
 		return NewValidationError("batch_id", m.BatchID, "must be > 0")
@@ -74,20 +80,37 @@ func (m MeasurementInput) Validate() error {
 	default:
 		return NewValidationError("kind", m.Kind, "must be sample|blank|standard")
 	}
+	if !finite(m.Ratio) {
+		return NewValidationError("ratio", m.Ratio, "isotope ratio must be a finite number")
+	}
 	if m.Ratio < 0 {
 		return NewValidationError("ratio", m.Ratio, "isotope ratio must be >= 0")
+	}
+	if !finite(m.RatioUnc) {
+		return NewValidationError("ratio_unc", m.RatioUnc, "uncertainty must be a finite number")
 	}
 	if m.RatioUnc < 0 {
 		return NewValidationError("ratio_unc", m.RatioUnc, "uncertainty must be >= 0")
 	}
-	if m.Kind == KindStandard && m.CertifiedRatio <= 0 {
-		return NewValidationError("certified_ratio", m.CertifiedRatio,
-			"standards require a positive certified ratio")
+	if m.Kind == KindStandard {
+		if !finite(m.CertifiedRatio) {
+			return NewValidationError("certified_ratio", m.CertifiedRatio,
+				"standards require a finite certified ratio")
+		}
+		if m.CertifiedRatio <= 0 {
+			return NewValidationError("certified_ratio", m.CertifiedRatio,
+				"standards require a positive certified ratio")
+		}
 	}
 	if m.MeasuredAt.IsZero() {
 		return NewValidationError("measured_at", m.MeasuredAt, "must be set")
 	}
 	return nil
+}
+
+// finite reports whether x is a representable, finite number (not NaN or Inf).
+func finite(x float64) bool {
+	return !math.IsNaN(x) && !math.IsInf(x, 0)
 }
 
 // BuildMeasurement converts validated input into a stored Measurement with a

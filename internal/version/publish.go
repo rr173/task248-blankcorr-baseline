@@ -66,6 +66,7 @@ func (v *Versioner) Publish(ctx context.Context, batchID int64, name, note strin
 	if err := v.s.UpdateVersionStatus(ver.ID, model.VersionPublished); err != nil {
 		return nil, fmt.Errorf("publish version: %w", err)
 	}
+	ver.Status = model.VersionPublished
 	if err := v.s.UpdateBatchStatus(batchID, model.BatchPublished); err != nil {
 		return nil, fmt.Errorf("mark batch published: %w", err)
 	}
@@ -79,7 +80,10 @@ func (v *Versioner) Seal(ctx context.Context, versionID int64) (*model.AgeVersio
 	if err != nil {
 		return nil, err
 	}
-	if !ver.CanTransitionTo(model.VersionSealed) {
+	// Sealing requires a published version: a draft must complete the publish
+	// flow first. Transition validates the move and stamps SealedAt on success
+	// before any persistence runs, so a rejected seal never mutates state.
+	if err := ver.Transition(model.VersionSealed); err != nil {
 		return nil, fmt.Errorf("%w: version %d status %s", model.ErrConflict, versionID, ver.Status)
 	}
 	if err := v.s.UpdateVersionStatus(versionID, model.VersionSealed); err != nil {
@@ -88,6 +92,5 @@ func (v *Versioner) Seal(ctx context.Context, versionID int64) (*model.AgeVersio
 	if err := v.s.SetBatchSealed(ver.BatchID); err != nil {
 		return nil, fmt.Errorf("seal batch: %w", err)
 	}
-	ver.Status = model.VersionSealed
 	return ver, nil
 }

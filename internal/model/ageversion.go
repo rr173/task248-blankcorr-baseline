@@ -50,11 +50,13 @@ func (v *AgeVersion) IsMutable() bool {
 	return v.Status == VersionDraft || v.Status == VersionPublished
 }
 
-// CanTransitionTo enforces the version state machine.
+// CanTransitionTo enforces the version state machine. A draft must be
+// published before it can be sealed; sealing a draft is rejected so an
+// immutable version is never produced without completing the publish flow.
 func (v *AgeVersion) CanTransitionTo(next string) bool {
 	switch v.Status {
 	case VersionDraft:
-		return next == VersionPublished || next == VersionSealed
+		return next == VersionPublished
 	case VersionPublished:
 		return next == VersionSealed || next == VersionSuperseded
 	default:

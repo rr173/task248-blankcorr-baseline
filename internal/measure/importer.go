@@ -46,10 +46,21 @@ func (im *Importer) Import(ctx context.Context, in model.MeasurementInput) (*mod
 
 // SetStatus transitions a measurement to a new lifecycle status, enforcing the
 // state machine (e.g. a contaminated measurement can never return to raw).
+// A sealed batch is immutable: its measurement statuses are frozen so a sealed
+// age version's inputs cannot drift after the fact.
 func (im *Importer) SetStatus(ctx context.Context, id int64, status string) (*model.Measurement, error) {
 	m, err := im.s.GetMeasurement(id)
 	if err != nil {
 		return nil, err
+	}
+	// reject mutation of a sealed batch's measurements before touching state,
+	// so a sealed version's underlying inputs stay exactly as they were
+	b, err := im.s.GetBatch(m.BatchID)
+	if err != nil {
+		return nil, err
+	}
+	if b.IsSealed() {
+		return nil, model.ErrSealed
 	}
 	if !m.CanTransitionTo(status) {
 		return nil, fmt.Errorf("%w: measurement %d %s -> %s", model.ErrConflict, id, m.Status, status)
